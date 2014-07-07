@@ -1,0 +1,156 @@
+# encoding:utf-8
+
+require "mail"
+require "roo"
+require "json"
+require "fileutils"
+
+# configuration
+Mail.defaults do
+  retriever_method :pop3, :address    => "pop.locum.ru",
+                          :port       => 110,
+                          :user_name  => "sankirtanam@aleontiev.me",
+                          :password   => "123",
+                          :enable_ssl => false
+end
+
+$processed = [] # list of processed files
+
+def load_processed_files()
+  $processed = File.readlines("processed.db")
+end
+
+def save_processed_files()
+  File.open("processed.db", "w") do |f|
+    f.puts($processed)
+  end
+end
+
+def fetch_emails()
+  Mail.all.each { |mail|
+    mail.attachments.each { |attachment|
+      next if $processed.any? { |s| mail.message_id == s.strip}
+
+      id   = mail.message_id
+  	  from = mail.from[0]
+      date = mail.date.strftime("%F")
+      name = attachment.filename
+      path = File.join("files", from, date, name)
+      FileUtils::mkdir_p File.join("files", from, date)
+
+      File.open(path, "w+b", 0644) { |f|
+        f.write attachment.body.decoded
+        $processed << id
+      }
+    }
+  }
+end
+
+# processes file by specified path
+def process_file(path)
+  result = [] # result hash itself
+  book   = open_workbook(path)  # open workbook
+
+  book.sheets.each do |sheet| # process each sheet
+    book.default_sheet = sheet
+    version            = get_version(book)
+
+    if version != -1 then
+      result << { 
+        meta: get_metadata(book, version, path),
+        data: get_data(book, version) }
+    else
+      result << { meta: { error: "Unable to determine file version" } }
+    end
+  end
+
+  result
+end
+
+# gets version of data representation for specified sheet
+def get_version(sheet)
+  begin
+    # no data to determine verson by
+    if sheet.nil? then return -1 end
+    if sheet.last_row.nil? then return -1 end
+    if sheet.row(1).nil? then return -1 end
+    if sheet.row(1)[0].nil? then return -1 end
+    
+    # version 1 checks
+    if sheet.row(1)[0] == "имя" then return 1 end
+    if sheet.row(1)[0] == "name" then return 1 end
+    
+    # version 2 checks
+    if sheet.row(1)[0].start_with?("Правила") then return 2 end
+  rescue
+  end
+
+  -1 # unabe to determine
+end
+
+# returns metadata from specified sheet using version and path
+def get_metadata(sheet, version, path)
+  case version
+  when 1
+    filename = File.basename(path, ".*")
+    return {
+      version:  1,
+      location: filename[0..-9],
+      month:    filename[-7, 2],
+      year:     filename[-4, 4]}
+  
+  when 2
+    row = sheet.row(2)
+    return {
+      version:  version,
+      location: row[0],
+      month:    row[2],
+      year:     row[4]}
+  
+  else
+    return { error: "Unable to get metadata for version specified"}
+  end
+end
+
+# returns statistic data for sheet specified
+def get_data(sheet, version)
+  result = []
+  start  = version == 2 ? 4 : 2
+  (start..sheet.last_row).each do |i|
+    row = sheet.row(i)
+    result << {
+      name:    row[0],
+      mahabig: row[1] || 0,
+      big:     row[2] || 0,
+      medium:  row[3] || 0,
+      small:   row[4] || 0}
+  end
+  result
+end
+
+# opens workbook by path specified
+def open_workbook(path)
+  case File.extname(path)
+    when '.xls'  then Roo::Excel.new(path)
+    when '.xlsx' then Roo::Excelx.new(path)
+    else raise "Unknown file type: #{path}"
+  end
+end
+
+def process_fetched_files()
+  result = []
+  Dir.foreach("files") do |path| # note one extra "*"
+    next if path == '.' or path == '..' or path == '.DS_Store'
+    begin
+      result << { :file_name => path, :data => process_file("files/" + path) }
+    rescue Exception => e
+      result << { :file_name => path, :error => e }
+    end
+  end
+  result
+end
+
+load_processed_files()
+fetch_emails()
+r = process_fetched_files()
+puts r.to_json
