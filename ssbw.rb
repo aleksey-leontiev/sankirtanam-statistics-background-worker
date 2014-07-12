@@ -52,4 +52,8 @@ Mail.all.each { |mail|
 
 File.open("processed.db", "w") { |f| f.puts($processed) }
 
-puts $result.to_json
+if $result != []
+  puts "Some data processed"
+  File.open(DateTime.now.strftime("%Y%m%d%H%M%S"), "w") { |f| f.write $result.to_json }
+end
+
