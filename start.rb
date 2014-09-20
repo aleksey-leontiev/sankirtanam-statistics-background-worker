@@ -7,34 +7,33 @@ require "fileutils"
 require "roo"
 
 mail_processor   = MailProcessor.new
-report_processor = ReportFileProcessor.new 
+report_processor = ReportFileProcessor.new
 mails            = mail_processor.fetch_new_emails()
-table            = DB[:reports]
+reports          = DB[:reports]
+records          = DB[:records]
+locations        = DB[:locations].all
 
 mails.each { |mail|
   puts mail[:from] + " " + mail[:date].to_s
+
   mail[:attachments].each { |attacment|
-
-    table << { location_id:1, year:2014, month:1  }
-
-    #puts attacment[:path]
-    #puts "----------"
+    
     report_processor.process_file(attacment[:path]).each { |report|
-      puts "------"
-      #puts report
-      report[:data].each { |record| 
-      	puts record[:name]
+      location  = locations.detect{|x| x[:name] == report[:meta][:location] }
+      year      = report[:meta][:year]
+      month     = report[:meta][:month]
+      reports  << { location_id: location[:id], year: year, month: month }
+      report_id = reports.order(:id).last[:id] # bad idea
+
+      report[:data].each { |record|
+        records << {
+          report_id: report_id,
+          name: record[:name],
+          huge: record[:huge],
+          big: record[:big],
+          medium: record[:medium],
+          small: record[:small] }
       }
     }
   }
 }
-
-
-
-#Mail.all.each { |mail|
-#  puts "123"
-#}
-
-#DB.fetch("SELECT name FROM users") do |row|
-#  p row[:name]
-#end
