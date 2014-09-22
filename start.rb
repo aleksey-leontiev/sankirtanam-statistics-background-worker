@@ -23,7 +23,7 @@ def start()
   # define last sync date
   begin
     line     = File.open("lastsync", 'r') { |file| file.read }
-    lastsync = DateTime.parse()
+    lastsync = DateTime.parse(line)
   rescue Exception => e
     puts "Unable to determine last sync date: #{e.message}"
   end
