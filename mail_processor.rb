@@ -1,20 +1,32 @@
+# mail processor
 class MailProcessor
-  def fetch_new_emails()
+  
+  # fetches new mail
+  def fetch_emails_after(datetime)
     result = []
 
-    Mail.all.each { |mail|
+    a = Mail.all.select do |mail|
+      mail.date > datetime
+    end
+
+    a.each do |mail|
       result << process_email(mail)
-    }
+    end
 
     result
   end
 
-  def send_email()
+  def send_email(message)
     Mail.deliver do
       from     'sankirtanam@aleontiev.me'
       to       'aleksey.leontiev@icloud.com'
       subject  'Sankirtanam'
-      body     'Test'
+      
+      html_part do
+        content_type 'text/html; charset=UTF-8'
+        body message
+      end
+
     end
   end
 
@@ -33,9 +45,10 @@ class MailProcessor
       File.open(path, "w+b", 0644) { |f| f.write attachment.body.decoded }
 
       result[:attachments] << {
-        path: path
+        path: path,
+        filename: attachment.filename
       }
-	  }
+    }
 
     result
   end
