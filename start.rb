@@ -42,6 +42,7 @@ def start()
     # save last sync date
     File.open("lastsync", 'w') { |file| file.write(now) }
   rescue Exception => e
+    puts "#{e.message}"
     send_report("General error: #{e.message}")
   end
 end 
@@ -49,7 +50,7 @@ end
 def process_group_of_emails(email, group)
   puts "#{email}:"
 
-  states = [] # { succeed }
+  states = [] # { succeed, filename, location, message }
   report = ""
 
   group.each do |mail|
@@ -74,7 +75,14 @@ end
 
 def process_attachment(attacment, states)
   puts "    #{attacment[:path]}"
-  $report_processor.process_file(attacment[:path]).each { |report|
+  begin
+    reports = $report_processor.process_file(attacment[:path])
+  rescue Exception => e
+    states << {filename: attacment[:path], succeed: false, message: e.message}
+    return
+  end
+
+  reports.each { |report|
     process_report(report, attacment[:filename], states)
   }
 end
